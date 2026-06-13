@@ -173,6 +173,24 @@ def build_notebook() -> None:
 
             majority_baseline_accuracy = class_dist["count"].max() / class_dist["count"].sum()
             print(f"Baseline accuracy jika selalu menebak kelas mayoritas: {majority_baseline_accuracy:.3f}")
+
+            leakage_audit = pd.DataFrame({
+                "check": [
+                    "Target Success masuk ke fitur",
+                    "Duplikasi seluruh baris",
+                    "Duplikasi kombinasi fitur tanpa target",
+                    "Missing value total",
+                    "Target hanya berisi 0 dan 1",
+                ],
+                "result": [
+                    TARGET in feature_cols,
+                    int(df.duplicated().sum()),
+                    int(X.duplicated().sum()),
+                    int(df.isna().sum().sum()),
+                    set(y.unique()).issubset({0, 1}),
+                ],
+            })
+            display(leakage_audit)
             """
         ),
         md(
@@ -246,6 +264,8 @@ def build_notebook() -> None:
             ## 4. Modeling dan Validasi
 
             Karena kelas berhasil hanya sekitar seperempat data, evaluasi menggunakan metrik yang lebih adil untuk data tidak seimbang: balanced accuracy, precision, recall, F1-score, dan ROC-AUC. Baseline mayoritas disertakan agar performa model tidak dinilai secara berlebihan.
+
+            Dataset hanya memiliki 250 baris. Dengan split 80:20, data latih berisi sekitar 200 baris dan data uji sekitar 50 baris. Jumlah ini memang kecil karena mengikuti dataset resmi panitia, sehingga validasi silang stratified dipakai agar evaluasi lebih stabil.
             """
         ),
         code(
@@ -253,6 +273,19 @@ def build_notebook() -> None:
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.20, stratify=y, random_state=RANDOM_STATE
             )
+
+            split_summary = pd.DataFrame({
+                "subset": ["train", "test", "all"],
+                "rows": [len(X_train), len(X_test), len(X)],
+                "success_0": [(y_train == 0).sum(), (y_test == 0).sum(), (y == 0).sum()],
+                "success_1": [(y_train == 1).sum(), (y_test == 1).sum(), (y == 1).sum()],
+            })
+            split_summary["success_1_pct"] = (split_summary["success_1"] / split_summary["rows"] * 100).round(2)
+            display(split_summary)
+
+            train_feature_rows = set(map(tuple, X_train.to_numpy()))
+            test_feature_rows = set(map(tuple, X_test.to_numpy()))
+            print("Jumlah overlap fitur persis antara train dan test:", len(train_feature_rows & test_feature_rows))
 
             models = {
                 "Majority Baseline": DummyClassifier(strategy="most_frequent"),
@@ -275,6 +308,19 @@ def build_notebook() -> None:
                 "roc_auc": "roc_auc",
             }
             cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=RANDOM_STATE)
+
+            model_rationale = pd.DataFrame({
+                "model": list(models.keys()),
+                "reason": [
+                    "Pembanding minimum untuk membuktikan model tidak hanya menebak kelas mayoritas.",
+                    "Model linear yang kuat untuk data kecil, stabil, dan mudah diinterpretasi.",
+                    "Model ensemble non-linear untuk menangkap interaksi fitur.",
+                    "Model ensemble acak tambahan sebagai pembanding Random Forest.",
+                    "Boosting model untuk pola non-linear bertahap.",
+                    "Boosting sederhana sebagai pembanding tambahan.",
+                ],
+            })
+            display(model_rationale)
             rows = []
             for name, model in models.items():
                 scores = cross_validate(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
@@ -616,8 +662,9 @@ def build_pdf() -> None:
 
     logo = Drawing(7 * cm, 7 * cm)
     logo.add(Circle(3.5 * cm, 3.5 * cm, 3.35 * cm, strokeColor=colors.HexColor("#555555"), fillColor=colors.white, strokeWidth=1.5))
-    logo.add(String(3.5 * cm, 3.65 * cm, "LOGO", textAnchor="middle", fontName="Times-Bold", fontSize=18))
-    logo.add(String(3.5 * cm, 3.25 * cm, "KAMPUS", textAnchor="middle", fontName="Times-Roman", fontSize=12))
+    logo.add(String(3.5 * cm, 3.72 * cm, "UWMS", textAnchor="middle", fontName="Times-Bold", fontSize=20))
+    logo.add(String(3.5 * cm, 3.34 * cm, "UNIVERSITAS WIDYA", textAnchor="middle", fontName="Times-Roman", fontSize=9))
+    logo.add(String(3.5 * cm, 3.08 * cm, "MANDALA SURABAYA", textAnchor="middle", fontName="Times-Roman", fontSize=9))
 
     story += [
         Spacer(1, 1.0 * cm),

@@ -38,6 +38,10 @@ outputs/
 reports/
 *.log
 
+# Internal competition notes/checklists
+# Keep these locally for submission prep, but do not publish them to GitHub.
+submission/
+
 # Official competition dataset
 # Keep the CSV locally for Kaggle, but do not publish it to a public GitHub repo
 # unless the committee explicitly allows redistribution.
