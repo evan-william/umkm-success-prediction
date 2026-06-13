@@ -1,11 +1,10 @@
 <div align="center">
 
-<!-- Optional: replace this with an official campus/team logo before publishing -->
 <img src="assets/magic-cloud-logo.svg" alt="Magic Cloud Logo" width="420"/>
 
 # UMKM Success Prediction
 
-**Machine learning analysis for predicting MSME business success in IN-FEST 2026 Data Science Competition**
+**Machine learning analysis for predicting MSME/UMKM business success in IN-FEST 2026 Data Science Competition**
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Notebook-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white)](https://www.kaggle.com/)
@@ -39,11 +38,11 @@ Institution: **Universitas Widya Mandala Surabaya**
 
 ---
 
-## Repository Description
+## Repository Info
 
 **GitHub repo title:** `umkm-success-prediction`  
-**GitHub repo description:** `Machine learning analysis for predicting MSME business success using official IN-FEST 2026 competition data.`  
-**Suggested tags:** `data-science machine-learning kaggle-notebook classification umkm msme scikit-learn python`
+**GitHub repo description:** `Machine learning analysis for predicting MSME/UMKM business success using official IN-FEST 2026 competition data.`  
+**Suggested tags:** `data-science machine-learning kaggle-notebook classification umkm msme scikit-learn python business-analytics infest-2026`
 
 ---
 
@@ -51,7 +50,7 @@ Institution: **Universitas Widya Mandala Surabaya**
 
 - Binary classification for UMKM success prediction.
 - Complete EDA, data quality audit, and target distribution analysis.
-- Handles imbalanced target data using proper validation metrics.
+- Handles imbalanced target data using appropriate validation metrics.
 - Compares baseline and machine learning models.
 - Uses stratified split, repeated stratified cross-validation, and model tuning.
 - Includes model interpretation through feature importance.
@@ -87,6 +86,7 @@ dsc_umkm_success_submission/
 ├── assets/
 │   └── magic-cloud-logo.svg
 ├── data/
+│   ├── .gitkeep
 │   └── umkm_success.csv
 ├── notebooks/
 │   ├── dsc_umkm_success_kaggle.ipynb
@@ -97,14 +97,14 @@ dsc_umkm_success_submission/
 ├── src/
 │   └── validate_dataset.py
 ├── submission/
+│   ├── GUIDELINE_AUDIT.md
 │   └── UPLOAD_CHECKLIST.md
 ├── tests/
 │   └── test_dataset_contract.py
 ├── .gitignore
 ├── LICENSE
 ├── README.md
-├── requirements.txt
-└── requirements_kaggle.txt
+└── requirements.txt
 ```
 
 ---
@@ -126,18 +126,22 @@ Kaggle is the recommended environment for the competition because it already inc
 
 ## Local Jupyter Setup
 
-If you want to run it locally, install Python first. On Windows, the easiest stable options are Python from python.org or Anaconda/Miniconda.
+If Python is available in PATH:
 
 ```powershell
 cd D:\CodeSpace\Competition\dsc_umkm_success_submission
-
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-
 jupyter lab
+```
+
+Windows fallback when Python is installed but not available in PATH:
+
+```powershell
+cd D:\CodeSpace\Competition\dsc_umkm_success_submission
+& "C:\Users\Evan\AppData\Local\Programs\Python\Python311\python.exe" -m jupyter lab --notebook-dir "D:\CodeSpace\Competition\dsc_umkm_success_submission"
 ```
 
 Then open:
@@ -146,7 +150,11 @@ Then open:
 notebooks/dsc_umkm_success_kaggle.ipynb
 ```
 
-If `python` or `jupyter` is not recognized, Python/Jupyter is not installed or not available in PATH. In that case, use Kaggle directly for the fastest and safest workflow.
+If a dataset error appears, confirm this file exists:
+
+```text
+D:\CodeSpace\Competition\dsc_umkm_success_submission\data\umkm_success.csv
+```
 
 ---
 

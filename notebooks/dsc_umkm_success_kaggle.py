@@ -8,7 +8,13 @@
 #
 # Notebook ini hanya memakai dataset panitia (`umkm_success.csv`) dan seluruh proses menggunakan Python sesuai ketentuan babak penyisihan. Tujuan analisis adalah memprediksi keberhasilan UMKM sekaligus menghasilkan rekomendasi praktis yang dapat diterapkan dalam pendampingan usaha.
 #
-# Sebelum submit: ganti placeholder identitas, jalankan **Run All**, lakukan **Save Version / Commit**, ubah notebook menjadi **Public**, lalu jangan melakukan perubahan setelah link dikumpulkan.# %% [markdown]
+# Sebelum submit: ganti placeholder identitas, jalankan **Run All**, lakukan **Save Version / Commit**, ubah notebook menjadi **Public**, lalu jangan melakukan perubahan setelah link dikumpulkan.
+#
+# Catatan eksekusi:
+#
+# - Di Kaggle, upload `umkm_success.csv` sebagai input dataset.
+# - Di lokal, simpan CSV pada folder `data/umkm_success.csv` di root project ini.
+# - Notebook ini sengaja mencari beberapa lokasi file agar dapat berjalan baik di Kaggle maupun Jupyter lokal.# %% [markdown]
 # ## 1. Metodologi
 #
 # Alur kerja:
@@ -54,11 +60,19 @@ candidate_paths.extend([
     Path("/kaggle/working/umkm_success.csv"),
     Path("umkm_success.csv"),
     Path("data/umkm_success.csv"),
+    Path("../data/umkm_success.csv"),
+    Path.cwd() / "umkm_success.csv",
+    Path.cwd() / "data" / "umkm_success.csv",
+    Path.cwd().parent / "data" / "umkm_success.csv",
 ])
 
 DATA_PATH = next((p for p in candidate_paths if p.exists()), None)
 if DATA_PATH is None:
-    raise FileNotFoundError("umkm_success.csv tidak ditemukan. Upload dataset panitia ke Kaggle input.")
+    checked = "\n".join(str(p) for p in candidate_paths)
+    raise FileNotFoundError(
+        "umkm_success.csv tidak ditemukan. Upload dataset panitia ke Kaggle input "
+        "atau letakkan file di folder data/ pada root project.\n\nPath yang dicek:\n" + checked
+    )
 
 print(f"Dataset digunakan: {DATA_PATH}")
 df = pd.read_csv(DATA_PATH)
@@ -68,7 +82,16 @@ display(df.head())
 #
 # Target prediksi adalah `Success`, dengan nilai `1` berarti berhasil dan `0` berarti tidak berhasil. Bagian ini memastikan data bersih dan target tidak bocor ke fitur.
 # %%
+EXPECTED_COLUMNS = [
+    "Age", "Education", "Initial_Capital", "Financial_Record_Keeping",
+    "Internet_Usage", "Business_Plan", "Marketing_Effort", "Partnership",
+    "Parent_Business_Experience", "Industry_Experience", "Owner_Gender",
+    "Professional_Advice", "Success"
+]
 TARGET = "Success"
+assert list(df.columns) == EXPECTED_COLUMNS, "Kolom dataset tidak sesuai dengan schema panitia."
+assert df[TARGET].isin([0, 1]).all(), "Target Success harus biner 0/1."
+
 feature_cols = [c for c in df.columns if c != TARGET]
 X = df[feature_cols].copy()
 y = df[TARGET].copy()
@@ -86,6 +109,9 @@ display(summary)
 class_dist = y.value_counts().sort_index().to_frame("count")
 class_dist["percentage"] = (class_dist["count"] / len(y) * 100).round(2)
 display(class_dist)
+
+majority_baseline_accuracy = class_dist["count"].max() / class_dist["count"].sum()
+print(f"Baseline accuracy jika selalu menebak kelas mayoritas: {majority_baseline_accuracy:.3f}")
 # %% [markdown]
 # ## 3. Exploratory Data Analysis
 #
@@ -157,8 +183,8 @@ models = {
         ("scaler", StandardScaler()),
         ("model", LogisticRegression(max_iter=3000, class_weight="balanced", random_state=RANDOM_STATE)),
     ]),
-    "Random Forest": RandomForestClassifier(n_estimators=500, class_weight="balanced", min_samples_leaf=3, random_state=RANDOM_STATE, n_jobs=-1),
-    "Extra Trees": ExtraTreesClassifier(n_estimators=500, class_weight="balanced", min_samples_leaf=2, random_state=RANDOM_STATE, n_jobs=-1),
+    "Random Forest": RandomForestClassifier(n_estimators=300, class_weight="balanced", min_samples_leaf=3, random_state=RANDOM_STATE, n_jobs=1),
+    "Extra Trees": ExtraTreesClassifier(n_estimators=300, class_weight="balanced", min_samples_leaf=2, random_state=RANDOM_STATE, n_jobs=1),
     "Gradient Boosting": GradientBoostingClassifier(random_state=RANDOM_STATE),
     "AdaBoost": AdaBoostClassifier(n_estimators=200, learning_rate=0.05, random_state=RANDOM_STATE),
 }
@@ -171,10 +197,10 @@ scoring = {
     "f1": make_scorer(f1_score, zero_division=0),
     "roc_auc": "roc_auc",
 }
-cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10, random_state=RANDOM_STATE)
+cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=RANDOM_STATE)
 rows = []
 for name, model in models.items():
-    scores = cross_validate(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1)
+    scores = cross_validate(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
     row = {"model": name}
     for metric in scoring:
         row[f"{metric}_mean"] = scores[f"test_{metric}"].mean()
@@ -194,11 +220,11 @@ search_spaces = {
         {"model__C": [0.03, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]},
     ),
     "Random Forest": (
-        RandomForestClassifier(n_estimators=700, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=-1),
+        RandomForestClassifier(n_estimators=400, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=1),
         {"max_depth": [None, 3, 4, 5, 7], "min_samples_leaf": [1, 2, 3, 5]},
     ),
     "Extra Trees": (
-        ExtraTreesClassifier(n_estimators=700, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=-1),
+        ExtraTreesClassifier(n_estimators=400, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=1),
         {"max_depth": [None, 3, 4, 5, 7], "min_samples_leaf": [1, 2, 3, 5]},
     ),
     "Gradient Boosting": (
@@ -210,7 +236,7 @@ search_spaces = {
 tuning_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
 tuned_rows, best_estimators = [], {}
 for name, (estimator, params) in search_spaces.items():
-    search = GridSearchCV(estimator, params, scoring="roc_auc", cv=tuning_cv, n_jobs=-1, refit=True)
+    search = GridSearchCV(estimator, params, scoring="roc_auc", cv=tuning_cv, n_jobs=1, refit=True)
     search.fit(X_train, y_train)
     best_estimators[name] = search.best_estimator_
     tuned_rows.append({"model": name, "best_cv_roc_auc": search.best_score_, "best_params": search.best_params_})
@@ -273,7 +299,7 @@ plt.show()
 # %%
 perm = permutation_importance(
     best_model, X_test, y_test, scoring="roc_auc",
-    n_repeats=100, random_state=RANDOM_STATE, n_jobs=-1
+    n_repeats=30, random_state=RANDOM_STATE, n_jobs=1
 )
 importance_df = pd.DataFrame({
     "feature": feature_cols,

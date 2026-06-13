@@ -55,6 +55,12 @@ def build_notebook() -> None:
             Notebook ini hanya memakai dataset panitia (`umkm_success.csv`) dan seluruh proses menggunakan Python sesuai ketentuan babak penyisihan. Tujuan analisis adalah memprediksi keberhasilan UMKM sekaligus menghasilkan rekomendasi praktis yang dapat diterapkan dalam pendampingan usaha.
 
             Sebelum submit: ganti placeholder identitas, jalankan **Run All**, lakukan **Save Version / Commit**, ubah notebook menjadi **Public**, lalu jangan melakukan perubahan setelah link dikumpulkan.
+
+            Catatan eksekusi:
+
+            - Di Kaggle, upload `umkm_success.csv` sebagai input dataset.
+            - Di lokal, simpan CSV pada folder `data/umkm_success.csv` di root project ini.
+            - Notebook ini sengaja mencari beberapa lokasi file agar dapat berjalan baik di Kaggle maupun Jupyter lokal.
             """
         ),
         md(
@@ -109,11 +115,19 @@ def build_notebook() -> None:
                 Path("/kaggle/working/umkm_success.csv"),
                 Path("umkm_success.csv"),
                 Path("data/umkm_success.csv"),
+                Path("../data/umkm_success.csv"),
+                Path.cwd() / "umkm_success.csv",
+                Path.cwd() / "data" / "umkm_success.csv",
+                Path.cwd().parent / "data" / "umkm_success.csv",
             ])
 
             DATA_PATH = next((p for p in candidate_paths if p.exists()), None)
             if DATA_PATH is None:
-                raise FileNotFoundError("umkm_success.csv tidak ditemukan. Upload dataset panitia ke Kaggle input.")
+                checked = "\\n".join(str(p) for p in candidate_paths)
+                raise FileNotFoundError(
+                    "umkm_success.csv tidak ditemukan. Upload dataset panitia ke Kaggle input "
+                    "atau letakkan file di folder data/ pada root project.\\n\\nPath yang dicek:\\n" + checked
+                )
 
             print(f"Dataset digunakan: {DATA_PATH}")
             df = pd.read_csv(DATA_PATH)
@@ -129,7 +143,16 @@ def build_notebook() -> None:
         ),
         code(
             """
+            EXPECTED_COLUMNS = [
+                "Age", "Education", "Initial_Capital", "Financial_Record_Keeping",
+                "Internet_Usage", "Business_Plan", "Marketing_Effort", "Partnership",
+                "Parent_Business_Experience", "Industry_Experience", "Owner_Gender",
+                "Professional_Advice", "Success"
+            ]
             TARGET = "Success"
+            assert list(df.columns) == EXPECTED_COLUMNS, "Kolom dataset tidak sesuai dengan schema panitia."
+            assert df[TARGET].isin([0, 1]).all(), "Target Success harus biner 0/1."
+
             feature_cols = [c for c in df.columns if c != TARGET]
             X = df[feature_cols].copy()
             y = df[TARGET].copy()
@@ -147,6 +170,9 @@ def build_notebook() -> None:
             class_dist = y.value_counts().sort_index().to_frame("count")
             class_dist["percentage"] = (class_dist["count"] / len(y) * 100).round(2)
             display(class_dist)
+
+            majority_baseline_accuracy = class_dist["count"].max() / class_dist["count"].sum()
+            print(f"Baseline accuracy jika selalu menebak kelas mayoritas: {majority_baseline_accuracy:.3f}")
             """
         ),
         md(
@@ -234,8 +260,8 @@ def build_notebook() -> None:
                     ("scaler", StandardScaler()),
                     ("model", LogisticRegression(max_iter=3000, class_weight="balanced", random_state=RANDOM_STATE)),
                 ]),
-                "Random Forest": RandomForestClassifier(n_estimators=500, class_weight="balanced", min_samples_leaf=3, random_state=RANDOM_STATE, n_jobs=-1),
-                "Extra Trees": ExtraTreesClassifier(n_estimators=500, class_weight="balanced", min_samples_leaf=2, random_state=RANDOM_STATE, n_jobs=-1),
+                "Random Forest": RandomForestClassifier(n_estimators=300, class_weight="balanced", min_samples_leaf=3, random_state=RANDOM_STATE, n_jobs=1),
+                "Extra Trees": ExtraTreesClassifier(n_estimators=300, class_weight="balanced", min_samples_leaf=2, random_state=RANDOM_STATE, n_jobs=1),
                 "Gradient Boosting": GradientBoostingClassifier(random_state=RANDOM_STATE),
                 "AdaBoost": AdaBoostClassifier(n_estimators=200, learning_rate=0.05, random_state=RANDOM_STATE),
             }
@@ -248,10 +274,10 @@ def build_notebook() -> None:
                 "f1": make_scorer(f1_score, zero_division=0),
                 "roc_auc": "roc_auc",
             }
-            cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=10, random_state=RANDOM_STATE)
+            cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=RANDOM_STATE)
             rows = []
             for name, model in models.items():
-                scores = cross_validate(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1)
+                scores = cross_validate(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
                 row = {"model": name}
                 for metric in scoring:
                     row[f"{metric}_mean"] = scores[f"test_{metric}"].mean()
@@ -273,11 +299,11 @@ def build_notebook() -> None:
                     {"model__C": [0.03, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]},
                 ),
                 "Random Forest": (
-                    RandomForestClassifier(n_estimators=700, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=-1),
+                    RandomForestClassifier(n_estimators=400, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=1),
                     {"max_depth": [None, 3, 4, 5, 7], "min_samples_leaf": [1, 2, 3, 5]},
                 ),
                 "Extra Trees": (
-                    ExtraTreesClassifier(n_estimators=700, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=-1),
+                    ExtraTreesClassifier(n_estimators=400, class_weight="balanced", random_state=RANDOM_STATE, n_jobs=1),
                     {"max_depth": [None, 3, 4, 5, 7], "min_samples_leaf": [1, 2, 3, 5]},
                 ),
                 "Gradient Boosting": (
@@ -289,7 +315,7 @@ def build_notebook() -> None:
             tuning_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
             tuned_rows, best_estimators = [], {}
             for name, (estimator, params) in search_spaces.items():
-                search = GridSearchCV(estimator, params, scoring="roc_auc", cv=tuning_cv, n_jobs=-1, refit=True)
+                search = GridSearchCV(estimator, params, scoring="roc_auc", cv=tuning_cv, n_jobs=1, refit=True)
                 search.fit(X_train, y_train)
                 best_estimators[name] = search.best_estimator_
                 tuned_rows.append({"model": name, "best_cv_roc_auc": search.best_score_, "best_params": search.best_params_})
@@ -362,7 +388,7 @@ def build_notebook() -> None:
             """
             perm = permutation_importance(
                 best_model, X_test, y_test, scoring="roc_auc",
-                n_repeats=100, random_state=RANDOM_STATE, n_jobs=-1
+                n_repeats=30, random_state=RANDOM_STATE, n_jobs=1
             )
             importance_df = pd.DataFrame({
                 "feature": feature_cols,
@@ -462,7 +488,6 @@ Paket ini dibuat untuk babak penyisihan Lomba Data Science IN-FEST 2026.
 - `paper/MAKALAH_DSC_Magic_Cloud.pdf` - draft makalah siap submit, masih perlu mengganti logo instansi.
 - `paper/makalah_source.md` - sumber teks makalah agar mudah diedit.
 - `submission/UPLOAD_CHECKLIST.md` - checklist final sebelum submit.
-- `requirements_kaggle.txt` - library yang dipakai di Kaggle.
 
 ## Langkah Upload ke Kaggle
 
@@ -529,7 +554,6 @@ Makalah PDF final ada di `paper/MAKALAH_DSC_Magic_Cloud.pdf`. File markdown ini 
     (ROOT / "README.md").write_text(readme, encoding="utf-8")
     (ROOT / "submission" / "UPLOAD_CHECKLIST.md").write_text(checklist, encoding="utf-8")
     (ROOT / "paper" / "makalah_source.md").write_text(source_md, encoding="utf-8")
-    (ROOT / "requirements_kaggle.txt").write_text("pandas\nnumpy\nmatplotlib\nseaborn\nscikit-learn\n", encoding="utf-8")
     (ROOT / "src" / "validate_dataset.py").write_text(
         """from pathlib import Path
 import pandas as pd
@@ -615,6 +639,18 @@ def build_pdf() -> None:
 
     h1("Abstrak")
     p("UMKM memiliki peran strategis dalam perekonomian, tetapi tingkat keberhasilannya dipengaruhi oleh banyak faktor operasional seperti kecukupan modal, pencatatan keuangan, penggunaan internet, rencana bisnis, pengalaman industri, dan konsultasi profesional. Makalah ini membangun pendekatan machine learning untuk memprediksi keberhasilan UMKM menggunakan dataset panitia yang terdiri atas 250 observasi dan 13 kolom. Target Success memiliki distribusi tidak seimbang, yaitu 188 UMKM tidak berhasil dan 62 UMKM berhasil. Analisis dilakukan melalui audit data, eksplorasi fitur, validasi model, interpretasi fitur, dan penyusunan rekomendasi.")
+    p("Metode yang digunakan dirancang agar sesuai dengan karakteristik data kecil dan tidak seimbang: validasi stratified, baseline mayoritas, repeated cross-validation, hyperparameter tuning, evaluasi multi-metrik, dan interpretasi fitur. Dengan pendekatan ini, model tidak hanya mengejar accuracy, tetapi juga menjaga kemampuan mendeteksi kelas berhasil yang jumlahnya lebih sedikit.")
+
+    h1("Kesesuaian dengan Guideline Kompetisi")
+    table([
+        ["Ketentuan", "Implementasi dalam Karya"],
+        ["Platform Kaggle Notebook", "Notebook disiapkan dalam format .ipynb dan dapat langsung di-import ke Kaggle."],
+        ["Bahasa Python", "Seluruh proses analisis, visualisasi, modeling, dan evaluasi menggunakan Python."],
+        ["Data panitia saja", "Analisis hanya memakai umkm_success.csv tanpa data eksternal."],
+        ["Tema data-driven solution", "Hasil model diterjemahkan menjadi rekomendasi peningkatan UMKM."],
+        ["Kelengkapan makalah", "Makalah memuat cover, pendahuluan, teori, proses, hasil, kesimpulan, pustaka, dan lampiran."],
+        ["Validitas model", "Evaluasi memakai baseline, stratified split, repeated CV, tuning, dan metrik imbalance."],
+    ], [5 * cm, 10 * cm])
 
     h1("1. Pendahuluan")
     h2("1.1 Latar Belakang")
@@ -635,6 +671,10 @@ def build_pdf() -> None:
     p("Dataset memiliki distribusi target tidak seimbang: 75,2 persen kelas 0 dan 24,8 persen kelas 1. Accuracy saja tidak cukup karena model yang selalu menebak kelas mayoritas dapat terlihat cukup baik. Oleh sebab itu, evaluasi juga menggunakan balanced accuracy, precision, recall, F1-score, dan ROC-AUC.")
     h2("2.4 Interpretabilitas Model")
     p("Interpretabilitas penting agar hasil prediksi dapat diterjemahkan menjadi kebijakan atau tindakan. Permutation importance digunakan untuk melihat penurunan performa ketika suatu fitur diacak. Pada model linear, koefisien terstandarisasi juga membantu membaca arah pengaruh fitur.")
+    h2("2.5 Risiko Overfitting dan Validasi")
+    p("Jumlah data yang relatif kecil membuat model berisiko menghafal pola train set. Untuk mengurangi risiko tersebut, evaluasi tidak hanya memakai satu split, tetapi repeated stratified cross-validation. Hyperparameter tuning dilakukan pada data latih, sedangkan test set tetap dipakai sebagai simulasi data baru. Pendekatan ini menjaga agar skor model lebih representatif.")
+    h2("2.6 Relevansi Bisnis UMKM")
+    p("Fitur seperti business plan, pencatatan keuangan, penggunaan internet, modal awal, pengalaman industri, dan konsultasi profesional merupakan faktor yang dapat ditingkatkan melalui program pendampingan. Karena itu, model prediktif dalam proyek ini diposisikan sebagai alat bantu prioritas intervensi, bukan sebagai penentu tunggal keberhasilan.")
 
     h1("3. Proses Analisis")
     h2("3.1 Data dan Variabel")
@@ -643,6 +683,19 @@ def build_pdf() -> None:
     p("Audit awal menunjukkan tidak terdapat missing value pada seluruh kolom. Semua variabel terbaca sebagai numerik. Target terdiri atas 188 data tidak berhasil dan 62 data berhasil. Ketidakseimbangan ini menjadi pertimbangan utama dalam pemilihan metrik dan strategi validasi.")
     h2("3.3 EDA, Modeling, dan Validasi")
     p("EDA dilakukan dengan melihat distribusi target, ringkasan statistik, success rate pada fitur biner, boxplot fitur numerik terhadap target, dan korelasi antarvariabel. Notebook membandingkan baseline mayoritas dengan Logistic Regression, Random Forest, Extra Trees, Gradient Boosting, dan AdaBoost. Data dipisahkan secara stratified, cross-validation menggunakan RepeatedStratifiedKFold, dan model terbaik dipilih berdasarkan ROC-AUC serta F1-score.")
+    h2("3.4 Desain Eksperimen")
+    table([
+        ["Komponen", "Keputusan Metodologis"],
+        ["Target", "Success sebagai klasifikasi biner 0/1."],
+        ["Split data", "Train-test split 80:20 dengan stratifikasi kelas."],
+        ["Cross-validation", "RepeatedStratifiedKFold 5 fold dan 10 repeat pada train set."],
+        ["Baseline", "DummyClassifier mayoritas sebagai pembanding minimum."],
+        ["Model kandidat", "Logistic Regression, Random Forest, Extra Trees, Gradient Boosting, AdaBoost."],
+        ["Tuning", "GridSearchCV dengan scoring ROC-AUC pada kandidat model kuat."],
+        ["Threshold", "Threshold alternatif dipilih dari train set berdasarkan F1 dan balanced accuracy."],
+    ], [4.2 * cm, 10.8 * cm])
+    h2("3.5 Alasan Pemilihan Metrik")
+    p("Accuracy tetap dilaporkan karena mudah dipahami, tetapi bukan satu-satunya indikator. Balanced accuracy dipakai agar kelas berhasil dan tidak berhasil mendapat bobot seimbang. Precision menunjukkan ketepatan prediksi berhasil, recall menunjukkan kemampuan menemukan UMKM yang benar-benar berhasil, F1-score menyeimbangkan precision dan recall, sedangkan ROC-AUC mengukur kualitas ranking probabilitas model.")
 
     h1("4. Hasil Analisis")
     h2("4.1 Ringkasan Dataset")
@@ -658,10 +711,30 @@ def build_pdf() -> None:
     ], [3.7 * cm, 2.1 * cm, 2.1 * cm, 7.1 * cm])
     h2("4.3 Hasil Model")
     p("Pada validasi lokal berbasis Logistic Regression terstandarisasi dengan class balancing, hasil indikatif yang diperoleh adalah accuracy sekitar 0,939, balanced accuracy sekitar 0,952, F1-score sekitar 0,890, dan ROC-AUC sekitar 0,989 pada repeated stratified cross-validation. Pada holdout stratified, threshold yang disesuaikan memberi accuracy sekitar 0,941, F1-score sekitar 0,889, dan ROC-AUC sekitar 0,994. Nilai final pada Kaggle dapat sedikit berbeda karena notebook melakukan pemilihan model dan tuning ulang secara langsung.")
+    table([
+        ["Metrik", "Fungsi", "Interpretasi yang Diharapkan"],
+        ["Accuracy", "Mengukur proporsi prediksi benar.", "Harus lebih baik dari baseline mayoritas 75,2%."],
+        ["Balanced Accuracy", "Menyeimbangkan performa kelas 0 dan 1.", "Penting karena target tidak seimbang."],
+        ["Precision", "Ketepatan prediksi kelas berhasil.", "Mengurangi false positive pada rekomendasi intervensi."],
+        ["Recall", "Kemampuan menemukan kelas berhasil.", "Mengurangi kasus berhasil yang tidak terdeteksi."],
+        ["F1-score", "Rata-rata harmonik precision dan recall.", "Metrik utama praktis untuk target tidak seimbang."],
+        ["ROC-AUC", "Kualitas pemeringkatan probabilitas.", "Stabil untuk membandingkan model lintas threshold."],
+    ], [3.2 * cm, 5.6 * cm, 6.2 * cm])
     h2("4.4 Interpretasi Fitur")
     p("Fitur dengan kontribusi paling kuat secara konsisten adalah Internet_Usage, Business_Plan, Financial_Record_Keeping, Initial_Capital, Professional_Advice, dan Industry_Experience. Temuan ini penting karena sebagian besar faktor tersebut dapat ditingkatkan melalui pelatihan, pendampingan, akses modal, dan transformasi digital.")
     h2("4.5 Diskusi")
     p("Hasil analisis menunjukkan bahwa keberhasilan UMKM lebih kuat berkaitan dengan kapabilitas bisnis yang dapat diintervensi daripada variabel demografis. Usia dan gender tidak menjadi pembeda utama. Program peningkatan keberhasilan UMKM sebaiknya memperkuat praktik bisnis inti seperti pembukuan, rencana bisnis, kanal digital, dan akses konsultasi.")
+    h2("4.6 Implikasi Data-Driven Solution")
+    table([
+        ["Faktor", "Masalah Nyata", "Solusi Berbasis Data"],
+        ["Business_Plan", "Banyak usaha berjalan tanpa arah dan target operasional.", "Wajibkan template rencana bisnis ringkas untuk UMKM binaan."],
+        ["Financial_Record_Keeping", "Pelaku usaha sulit membaca arus kas dan laba.", "Pelatihan pembukuan mingguan dan dashboard kas sederhana."],
+        ["Internet_Usage", "Akses pasar terbatas pada pelanggan sekitar.", "Onboarding marketplace, katalog digital, dan konten media sosial."],
+        ["Initial_Capital", "Keterbatasan modal menghambat stok dan operasional.", "Skema modal mikro berbasis kesiapan rencana dan pembukuan."],
+        ["Professional_Advice", "Keputusan usaha sering tidak tervalidasi.", "Klinik konsultasi bisnis berkala dengan mentor keuangan dan pemasaran."],
+    ], [3.4 * cm, 5.4 * cm, 6.2 * cm])
+    h2("4.7 Keterbatasan Analisis")
+    p("Dataset hanya berisi 250 observasi sehingga performa model harus dibaca secara hati-hati. Label keberhasilan juga bergantung pada definisi panitia dan tidak memuat dimensi waktu. Beberapa faktor eksternal seperti lokasi, sektor usaha rinci, kondisi pasar, dan omzet historis tidak tersedia. Karena itu, model sebaiknya digunakan sebagai alat bantu analisis awal, bukan keputusan final tanpa verifikasi lapangan.")
 
     h1("5. Kesimpulan dan Rekomendasi")
     h2("5.1 Kesimpulan")
@@ -669,6 +742,8 @@ def build_pdf() -> None:
     h2("5.2 Rekomendasi")
     for item in ["Menyediakan template rencana bisnis sederhana yang wajib diisi dan direview oleh UMKM binaan.", "Mengadakan pelatihan pencatatan keuangan harian berbasis spreadsheet atau aplikasi kas sederhana.", "Mendorong penggunaan internet untuk katalog digital, marketplace, media sosial, dan komunikasi pelanggan.", "Menghubungkan akses modal mikro dengan kesiapan bisnis, khususnya rencana usaha dan pencatatan keuangan.", "Membuat klinik konsultasi profesional bulanan untuk aspek keuangan, pajak, pemasaran, dan operasional.", "Mengembangkan mentoring sektor usaha agar pengalaman industri dapat ditransfer ke UMKM yang lebih baru."]:
         p("- " + item)
+    h2("5.3 Rencana Tindak Lanjut")
+    p("Tindak lanjut yang disarankan adalah membangun dashboard sederhana untuk memantau skor risiko UMKM, menambahkan data longitudinal seperti omzet bulanan dan umur usaha, serta melakukan validasi lapangan terhadap rekomendasi model. Jika data baru tersedia, model dapat diperbarui secara berkala agar tetap relevan dengan perubahan pasar.")
 
     h1("Daftar Pustaka")
     for ref in ['[1] L. Breiman, "Random forests," Machine Learning, vol. 45, no. 1, pp. 5-32, 2001.', '[2] F. Pedregosa et al., "Scikit-learn: Machine learning in Python," Journal of Machine Learning Research, vol. 12, pp. 2825-2830, 2011.', "[3] M. Kuhn and K. Johnson, Applied Predictive Modeling. New York, NY, USA: Springer, 2013.", "[4] T. Hastie, R. Tibshirani, and J. Friedman, The Elements of Statistical Learning, 2nd ed. New York, NY, USA: Springer, 2009.", "[5] OECD, SME and Entrepreneurship Outlook 2023. Paris, France: OECD Publishing, 2023."]:
