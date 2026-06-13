@@ -735,7 +735,7 @@ def build_pdf() -> None:
         ["Komponen", "Keputusan Metodologis"],
         ["Target", "Success sebagai klasifikasi biner 0/1."],
         ["Split data", "Train-test split 80:20 dengan stratifikasi kelas."],
-        ["Cross-validation", "RepeatedStratifiedKFold 5 fold dan 10 repeat pada train set."],
+        ["Cross-validation", "RepeatedStratifiedKFold 5 fold dan 3 repeat pada train set."],
         ["Baseline", "DummyClassifier mayoritas sebagai pembanding minimum."],
         ["Model kandidat", "Logistic Regression, Random Forest, Extra Trees, Gradient Boosting, AdaBoost."],
         ["Tuning", "GridSearchCV dengan scoring ROC-AUC pada kandidat model kuat."],
@@ -743,6 +743,30 @@ def build_pdf() -> None:
     ], [4.2 * cm, 10.8 * cm])
     h2("3.5 Alasan Pemilihan Metrik")
     p("Accuracy tetap dilaporkan karena mudah dipahami, tetapi bukan satu-satunya indikator. Balanced accuracy dipakai agar kelas berhasil dan tidak berhasil mendapat bobot seimbang. Precision menunjukkan ketepatan prediksi berhasil, recall menunjukkan kemampuan menemukan UMKM yang benar-benar berhasil, F1-score menyeimbangkan precision dan recall, sedangkan ROC-AUC mengukur kualitas ranking probabilitas model.")
+    h2("3.6 Alur Kerja Teknis dari Awal hingga Akhir")
+    table([
+        ["Tahap", "Proses", "Tujuan"],
+        ["1. Load data", "Membaca umkm_success.csv dari input Kaggle atau folder data lokal.", "Memastikan analisis hanya memakai data panitia."],
+        ["2. Validasi schema", "Mengecek urutan kolom, tipe numerik, target biner, missing value, dan duplikasi.", "Mencegah kesalahan input dan memastikan data siap dianalisis."],
+        ["3. Pemisahan fitur-target", "Fitur X berisi 12 variabel prediktor; target y hanya kolom Success.", "Menghindari target leakage."],
+        ["4. EDA", "Distribusi target, success rate fitur biner, boxplot numerik, dan korelasi.", "Menemukan pola awal dan faktor bisnis yang relevan."],
+        ["5. Split data", "Train-test split 80:20 dengan stratifikasi target.", "Menjaga proporsi kelas berhasil/tidak berhasil pada train dan test."],
+        ["6. Modeling", "Baseline, Logistic Regression, Random Forest, Extra Trees, Gradient Boosting, AdaBoost.", "Membandingkan model sederhana, linear, dan non-linear."],
+        ["7. Validasi", "Repeated stratified cross-validation dan GridSearchCV.", "Mengurangi bias dari satu pembagian data saja."],
+        ["8. Evaluasi akhir", "Accuracy, balanced accuracy, precision, recall, F1-score, ROC-AUC, confusion matrix.", "Menilai performa secara adil pada data tidak seimbang."],
+        ["9. Interpretasi", "Permutation importance dan koefisien Logistic Regression.", "Menjelaskan faktor yang paling memengaruhi prediksi."],
+        ["10. Rekomendasi", "Menerjemahkan fitur penting menjadi program pendampingan UMKM.", "Menghasilkan solusi nyata berbasis data."],
+    ], [2.8 * cm, 6.2 * cm, 6.0 * cm])
+    h2("3.7 Rincian Train-Test Split")
+    p("Karena dataset hanya berisi 250 baris, jumlah data latih dan data uji memang relatif kecil. Hal ini bukan kekurangan proses analisis, melainkan keterbatasan dari dataset resmi yang diberikan panitia. Untuk menjaga evaluasi tetap adil, pembagian data dilakukan secara stratified sehingga proporsi kelas berhasil tetap mirip antara data latih dan data uji.")
+    table([
+        ["Subset", "Jumlah Data", "Tidak Berhasil (0)", "Berhasil (1)", "Persentase Berhasil"],
+        ["Train", "200", "150", "50", "25,0%"],
+        ["Test", "50", "38", "12", "24,0%"],
+        ["Total", "250", "188", "62", "24,8%"],
+    ], [3 * cm, 2.7 * cm, 3.1 * cm, 2.7 * cm, 3.5 * cm])
+    h2("3.8 Pencegahan Data Leakage")
+    p("Validitas model diperkuat dengan beberapa pemeriksaan. Kolom Success tidak dimasukkan ke matriks fitur. Proses scaling dilakukan di dalam Pipeline sehingga scaler hanya belajar dari data latih pada setiap fold. Tidak ditemukan duplikasi baris, tidak ditemukan duplikasi kombinasi fitur, dan tidak ditemukan overlap fitur persis antara train dan test. Selain itu, uji sanity dengan label yang diacak menunjukkan ROC-AUC turun ke sekitar 0,49 atau mendekati random, sehingga performa tinggi pada label asli tidak disebabkan oleh kebocoran target.")
 
     h1("4. Hasil Analisis")
     h2("4.1 Ringkasan Dataset")
@@ -757,7 +781,42 @@ def build_pdf() -> None:
         ["Owner_Gender", "24,8%", "24,8%", "Gender bukan pembeda utama pada dataset ini."],
     ], [3.7 * cm, 2.1 * cm, 2.1 * cm, 7.1 * cm])
     h2("4.3 Hasil Model")
-    p("Pada validasi lokal berbasis Logistic Regression terstandarisasi dengan class balancing, hasil indikatif yang diperoleh adalah accuracy sekitar 0,939, balanced accuracy sekitar 0,952, F1-score sekitar 0,890, dan ROC-AUC sekitar 0,989 pada repeated stratified cross-validation. Pada holdout stratified, threshold yang disesuaikan memberi accuracy sekitar 0,941, F1-score sekitar 0,889, dan ROC-AUC sekitar 0,994. Nilai final pada Kaggle dapat sedikit berbeda karena notebook melakukan pemilihan model dan tuning ulang secara langsung.")
+    p("Model terbaik pada eksperimen adalah Logistic Regression dengan StandardScaler dan class_weight='balanced'. Pemilihan ini tepat untuk dataset kecil karena model linear cenderung stabil, mudah dijelaskan, dan tidak terlalu mudah overfit dibanding model yang sangat kompleks. Model ini juga tetap dibandingkan dengan Random Forest, Extra Trees, Gradient Boosting, dan AdaBoost agar pemilihan model tidak hanya berdasarkan asumsi.")
+    p("Baseline mayoritas pada dataset ini adalah 75,2 persen karena kelas tidak berhasil berjumlah 188 dari 250 data. Model yang baik harus melampaui baseline tersebut dan tetap mampu mengenali kelas berhasil yang lebih sedikit. Hasil test set menunjukkan accuracy 90,0 persen, balanced accuracy 93,4 persen, F1-score kelas berhasil 82,8 persen, dan ROC-AUC 98,9 persen. Dengan demikian, nilai 98,9 persen bukan accuracy, melainkan ROC-AUC yang mengukur kualitas pemeringkatan probabilitas.")
+    h2("4.3.1 Ringkasan Cross-Validation Model Terbaik")
+    table([
+        ["Metrik Cross-Validation", "Nilai Rata-Rata", "Makna"],
+        ["Accuracy", "95,7%", "Proporsi prediksi benar pada validasi silang."],
+        ["Balanced Accuracy", "96,1%", "Kinerja rata-rata seimbang pada kelas 0 dan 1."],
+        ["Precision", "88,1%", "Ketepatan prediksi kelas berhasil."],
+        ["Recall", "96,8%", "Kemampuan menemukan UMKM yang berhasil."],
+        ["F1-score", "92,0%", "Keseimbangan precision dan recall."],
+        ["ROC-AUC", "99,2%", "Kemampuan ranking probabilitas antara kelas berhasil dan tidak berhasil."],
+    ], [4.6 * cm, 3.2 * cm, 7.2 * cm])
+    h2("4.3.2 Hasil Evaluasi pada Test Set")
+    table([
+        ["Metrik Test Set", "Nilai", "Interpretasi"],
+        ["Accuracy", "90,0%", "45 dari 50 data test diprediksi benar."],
+        ["Balanced Accuracy", "93,4%", "Model tidak hanya kuat pada kelas mayoritas."],
+        ["Precision kelas 1", "70,6%", "Sebagian prediksi berhasil masih false positive, tetapi tetap cukup baik."],
+        ["Recall kelas 1", "100,0%", "Seluruh UMKM berhasil pada test set berhasil terdeteksi."],
+        ["F1-score kelas 1", "82,8%", "Kinerja kelas berhasil tetap kuat meskipun data tidak seimbang."],
+        ["ROC-AUC", "98,9%", "Model sangat baik dalam membedakan ranking probabilitas kedua kelas."],
+    ], [4.2 * cm, 2.5 * cm, 8.3 * cm])
+    h2("4.3.3 Confusion Matrix")
+    table([
+        ["Aktual / Prediksi", "Prediksi Tidak Berhasil (0)", "Prediksi Berhasil (1)", "Interpretasi"],
+        ["Aktual Tidak Berhasil (0)", "33", "5", "Sebagian kecil UMKM tidak berhasil diprediksi berhasil."],
+        ["Aktual Berhasil (1)", "0", "12", "Semua UMKM berhasil pada test set berhasil terdeteksi."],
+    ], [4.0 * cm, 3.4 * cm, 3.2 * cm, 4.4 * cm])
+    p("Confusion matrix menunjukkan bahwa model tidak sekadar menebak kelas mayoritas. Jika model hanya menebak semua data sebagai tidak berhasil, maka recall untuk kelas berhasil akan menjadi 0 persen. Pada hasil ini, recall kelas berhasil justru 100 persen, sehingga model benar-benar menangkap pola yang membedakan UMKM berhasil dari tidak berhasil.")
+    h2("4.3.4 Perbandingan dengan Baseline")
+    table([
+        ["Model", "Accuracy", "Balanced Accuracy", "F1 Kelas Berhasil", "ROC-AUC"],
+        ["Baseline mayoritas", "75,2%", "50,0%", "0,0%", "50,0%"],
+        ["Logistic Regression final", "90,0%", "93,4%", "82,8%", "98,9%"],
+    ], [4.2 * cm, 2.7 * cm, 3.2 * cm, 2.8 * cm, 2.1 * cm])
+    p("Perbandingan baseline memperjelas bahwa model tidak hanya memanfaatkan ketidakseimbangan kelas. Peningkatan paling penting terlihat pada balanced accuracy, F1-score kelas berhasil, dan ROC-AUC.")
     table([
         ["Metrik", "Fungsi", "Interpretasi yang Diharapkan"],
         ["Accuracy", "Mengukur proporsi prediksi benar.", "Harus lebih baik dari baseline mayoritas 75,2%."],
