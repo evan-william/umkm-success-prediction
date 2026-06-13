@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build/cache outputs
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Large/generated local outputs
+outputs/
+reports/
+*.log
+
+# Official competition dataset
+# Keep the CSV locally for Kaggle, but do not publish it to a public GitHub repo
+# unless the committee explicitly allows redistribution.
+data/*.csv
+!paper/MAKALAH_DSC_Magic_Cloud.pdf
