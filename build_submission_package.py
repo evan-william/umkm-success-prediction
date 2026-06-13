@@ -4,6 +4,7 @@ import json
 import shutil
 import textwrap
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import pandas as pd
 from reportlab.graphics.shapes import Circle, Drawing, String
@@ -629,6 +630,8 @@ def build_pdf() -> None:
     styles.add(ParagraphStyle("H2Custom", parent=styles["Heading2"], fontName="Times-Bold", fontSize=12, leading=14, spaceBefore=8, spaceAfter=5))
     styles.add(ParagraphStyle("Center", parent=styles["Normal"], fontName="Times-Roman", fontSize=12, leading=14, alignment=TA_CENTER))
     styles.add(ParagraphStyle("LeftSmall", parent=styles["Normal"], fontName="Times-Roman", fontSize=9, leading=11, alignment=TA_LEFT))
+    styles.add(ParagraphStyle("TableHeader", parent=styles["Normal"], fontName="Times-Bold", fontSize=8, leading=9.5, alignment=TA_LEFT, splitLongWords=True))
+    styles.add(ParagraphStyle("TableBody", parent=styles["Normal"], fontName="Times-Roman", fontSize=8, leading=9.5, alignment=TA_LEFT, splitLongWords=True))
 
     doc = SimpleDocTemplate(str(pdf_path), pagesize=A4, leftMargin=3 * cm, rightMargin=2.5 * cm, topMargin=2.5 * cm, bottomMargin=2.5 * cm)
     story = []
@@ -642,16 +645,24 @@ def build_pdf() -> None:
     def h2(text: str) -> None:
         story.append(Paragraph(text, styles["H2Custom"]))
 
+    def _table_cell(value: object, header: bool = False) -> Paragraph:
+        text = str(value).replace("_", " ")
+        text = escape(text).replace("\n", "<br/>")
+        return Paragraph(text, styles["TableHeader" if header else "TableBody"])
+
     def table(data: list[list[str]], widths: list[float]) -> None:
-        t = Table(data, colWidths=widths, repeatRows=1)
+        wrapped = []
+        for row_index, row in enumerate(data):
+            wrapped.append([_table_cell(value, header=(row_index == 0)) for value in row])
+        t = Table(wrapped, colWidths=widths, repeatRows=1, splitByRow=1, hAlign="LEFT")
         t.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
             ("FONTNAME", (0, 1), (-1, -1), "Times-Roman"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("LEADING", (0, 0), (-1, -1), 11),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("LEADING", (0, 0), (-1, -1), 9.5),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF7")),
             ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#777777")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 5),
             ("RIGHTPADDING", (0, 0), (-1, -1), 5),
             ("TOPPADDING", (0, 0), (-1, -1), 4),
@@ -856,7 +867,14 @@ def build_pdf() -> None:
         p(ref)
 
     h1("Lampiran")
-    p("Lampiran utama terdapat pada Kaggle Notebook public yang berisi kode lengkap, output EDA, hasil validasi model, confusion matrix, ROC curve, feature importance, dan tabel rekomendasi. Pastikan link notebook sudah public sebelum dikumpulkan melalui formulir panitia.")
+    p("Lampiran berisi ringkasan artefak pendukung yang digunakan dalam proyek analisis ini. Kode lengkap, proses eksplorasi data, validasi model, confusion matrix, ROC curve, permutation importance, dan tabel rekomendasi tersedia pada notebook analisis yang menjadi pendamping makalah.")
+    table([
+        ["Artefak", "Isi Pendukung", "Peran dalam Analisis"],
+        ["Notebook analisis", "Kode Python, EDA, modeling, evaluasi, dan interpretasi.", "Menjadi bukti replikasi proses analisis dari awal hingga akhir."],
+        ["Dataset", "umkm_success.csv dengan 250 observasi dan 13 kolom.", "Sumber utama untuk membangun model prediksi keberhasilan UMKM."],
+        ["Output evaluasi", "Metrik cross-validation, test set, confusion matrix, dan ROC curve.", "Menunjukkan validitas dan ketepatan model."],
+        ["Feature importance", "Peringkat kontribusi fitur terhadap performa prediksi.", "Dasar untuk menyusun rekomendasi bisnis berbasis data."],
+    ], [3.4 * cm, 5.8 * cm, 5.8 * cm])
 
     def page_number(canvas, doc_obj):
         canvas.saveState()
